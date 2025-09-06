@@ -9,15 +9,15 @@ const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 const app = express();
-app.use(cors());
 app.use(express.json());
+app.use(cors());
 
 // ---------- SQLite Setup ----------
+// Render persistent disk mount: /data
 const DB_PATH = process.env.RENDER_PERSISTENT_DISK_PATH
   ? path.join(process.env.RENDER_PERSISTENT_DISK_PATH, "bstream.db")
-  : path.join(process.cwd(), "bstream.db");
+  : path.join(__dirname, "bstream.db");
 
-// Ensure folder exists
 if (!fs.existsSync(path.dirname(DB_PATH))) fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
 let db;
@@ -27,6 +27,7 @@ let db;
     driver: sqlite3.Database,
   });
 
+  // Create table if it doesn't exist
   await db.run(`
     CREATE TABLE IF NOT EXISTS videos (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,20 +50,11 @@ const s3 = new S3Client({
 
 // ---------- Basic Auth ----------
 function checkAuth(req, res, next) {
-  const auth = req.headers.authorization;
-  if (!auth) {
-    res.set("WWW-Authenticate", 'Basic realm="Admin Area"');
-    return res.status(401).send("Authentication required.");
-  }
-
-  const [login, password] = Buffer.from(auth.split(" ")[1], "base64")
-    .toString()
-    .split(":");
-
+  const b64auth = (req.headers.authorization || "").split(" ")[1] || "";
+  const [login, password] = Buffer.from(b64auth, "base64").toString().split(":");
   if (login === process.env.ADMIN_USER && password === process.env.ADMIN_PASS) return next();
-
   res.set("WWW-Authenticate", 'Basic realm="Admin Area"');
-  return res.status(401).send("Authentication required.");
+  res.status(401).send("Authentication required.");
 }
 
 // ---------- Upload URL ----------
@@ -74,7 +66,7 @@ app.post("/upload-url", checkAuth, async (req, res) => {
     const dur = parseInt(duration) || 3600;
     const startDate = startTime ? new Date(startTime) : new Date();
 
-    const key = `${Date.now()}-${fileName}`;
+    const key = Date.now() + "-" + fileName;
     const command = new PutObjectCommand({
       Bucket: process.env.S3_BUCKET_NAME,
       Key: key,
@@ -84,6 +76,7 @@ app.post("/upload-url", checkAuth, async (req, res) => {
     const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
     const videoUrl = `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
 
+    // Insert into DB
     const result = await db.run(
       `INSERT INTO videos (title, url, startTime, duration) VALUES (?, ?, ?, ?)`,
       [title || fileName, videoUrl, startDate.toISOString(), dur]
@@ -107,16 +100,15 @@ app.post("/upload-url", checkAuth, async (req, res) => {
 // ---------- Get current live video ----------
 app.get("/now", async (req, res) => {
   try {
-    const now = new Date().toISOString();
-    const video = await db.get(
-      `SELECT * FROM videos 
-       WHERE startTime <= ? AND datetime(startTime, '+' || duration || ' seconds') >= ?`,
-      [now, now]
-    );
+    const now = new Date();
+    const video = await db.get(`SELECT * FROM videos WHERE startTime <= ? AND datetime(startTime, '+' || duration || ' seconds') >= ?`, [
+      now.toISOString(),
+      now.toISOString(),
+    ]);
     res.json(video || {});
   } catch (err) {
     console.error(err);
-    res.status(500).json({});
+    res.status(500).send({});
   }
 });
 
@@ -131,12 +123,13 @@ app.get("/schedule", async (req, res) => {
   }
 });
 
-// ---------- Stream video (redirect to S3) ----------
+// ---------- Stream video efficiently ----------
 app.get("/video/:id", async (req, res) => {
   try {
-    const video = await db.get(`SELECT * FROM videos WHERE id = ?`, [req.params.id]);
+    const video = await db.get("SELECT * FROM videos WHERE id = ?", [req.params.id]);
     if (!video) return res.status(404).send("Video not found");
 
+    // Redirect to S3 URL (bypasses RAM issues)
     res.redirect(video.url);
   } catch (err) {
     console.error(err);
