@@ -9,7 +9,7 @@ export default function Home() {
   useEffect(() => {
     // Fetch the schedule from your backend
     axios
-      .get("https://your-backend-url.onrender.com/schedule")
+      .get("https://bstream-backend.onrender.com/schedule")
       .then(res => {
         // Extract unique channels from schedule
         const uniqueChannels = res.data.reduce((acc, video) => {
