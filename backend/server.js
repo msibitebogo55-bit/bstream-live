@@ -237,4 +237,10 @@ app.get("/video/:id", async (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Backend running on :${PORT}`));
+
+app.get("/", (req, res) => {
+  res.send("Backed is running");
+});
+app.listen(PORT, () => {
+  console.log(`Backend running on :${PORT}`);
+});
