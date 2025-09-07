@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 
 export default function Live() {
   const videoRef = useRef(null);
@@ -6,15 +7,23 @@ export default function Live() {
   const [schedule, setSchedule] = useState([]);
   const [elapsed, setElapsed] = useState(0);
 
-  // Fetch schedule from backend
+  const location = useLocation();
+  const channelId = location.state?.channelId;
+
   const fetchSchedule = async () => {
     try {
-      const res = await fetch("http://localhost:5000/schedule");
+      const res = await fetch("https://bstream-backend.onrender.com/schedule");
       const data = await res.json();
-      setSchedule(data);
+
+      // Filter schedule for selected channel
+      const channelSchedule = channelId
+        ? data.filter(v => v.channelId === channelId)
+        : data;
+
+      setSchedule(channelSchedule);
 
       const now = new Date();
-      const liveVideo = data.find((v) => {
+      const liveVideo = channelSchedule.find((v) => {
         const start = new Date(v.startTime);
         const end = new Date(start.getTime() + v.duration * 1000);
         return now >= start && now <= end;
@@ -32,23 +41,19 @@ export default function Live() {
     }
   };
 
-  // Update schedule every second
   useEffect(() => {
     fetchSchedule();
     const interval = setInterval(fetchSchedule, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [channelId]);
 
-  // Sync video playback with elapsed time
   useEffect(() => {
     const videoEl = videoRef.current;
     if (!videoEl || !currentVideo) return;
 
-    // Set currentTime to live elapsed
     videoEl.currentTime = elapsed;
     videoEl.play();
 
-    // Prevent seeking ahead
     const handleSeeking = () => {
       const allowedTime = Math.floor((new Date() - new Date(currentVideo.startTime)) / 1000);
       if (videoEl.currentTime > allowedTime) {
@@ -62,7 +67,7 @@ export default function Live() {
 
   return (
     <div style={{ maxWidth: "900px", margin: "20px auto", fontFamily: "Arial, sans-serif" }}>
-      <h1>On-Campus StudentTV</h1>
+      <h1>Live Stream</h1>
 
       {currentVideo ? (
         <div>
