@@ -1,4 +1,3 @@
-// server.js
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
@@ -7,10 +6,6 @@ const fs = require("fs");
 const sqlite3 = require("sqlite3").verbose();
 const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
-const ffmpeg = require("fluent-ffmpeg");
-const ffprobe = require("ffprobe-static");
-
-ffmpeg.setFfprobePath(ffprobe.path);
 
 const app = express();
 app.use(express.json());
@@ -32,8 +27,8 @@ db.serialize(() => {
       url TEXT NOT NULL,
       s3key TEXT NOT NULL,
       startTime TEXT NOT NULL,
-      duration INTEGER,                -- seconds; NULL until confirmed
-      status TEXT NOT NULL DEFAULT 'pending', -- pending|ready|failed
+      duration INTEGER,                
+      status TEXT NOT NULL DEFAULT 'pending', 
       channelId TEXT NOT NULL DEFAULT 'student-tv',
       createdAt TEXT NOT NULL DEFAULT (datetime('now'))
     )
@@ -91,56 +86,27 @@ function checkAuth(req, res, next) {
 }
 
 // ---------- Scheduling helpers ----------
-// returns list of videos (pending or ready) ordered by startTime
-async function getAllScheduled(channelId = "student-tv") {
-  const rows = await dbAll(
-    `SELECT * FROM videos WHERE channelId = ? AND status IN ('pending','ready') ORDER BY datetime(startTime) ASC`,
-    [channelId]
-  );
-  return rows;
-}
 
-// Given requestedStartISO and durationSec, find earliest startTime (ISO) that doesn't overlap existing schedule
-// Excludes an optional 'excludeId' (useful when re-scheduling the same row)
-async function findNextAvailableStart(requestedStartISO, durationSec, channelId = "student-tv", excludeId = null) {
+const DEFAULT_DURATION_SEC = 600; // 10 minutes
+
+async function findNextAvailableStart(requestedStartISO, durationSec = DEFAULT_DURATION_SEC, channelId = "student-tv") {
   const requested = new Date(requestedStartISO).getTime();
   const rows = await dbAll(
-    `SELECT id, startTime, duration FROM videos WHERE channelId = ? AND status IN ('pending','ready') ${excludeId ? "AND id != ?" : ""} ORDER BY datetime(startTime) ASC`,
-    excludeId ? [channelId, excludeId] : [channelId]
+    `SELECT startTime, duration FROM videos WHERE channelId = ? AND status IN ('pending','ready') ORDER BY datetime(startTime) ASC`,
+    [channelId]
   );
 
-  // We'll walk through and shift start forward if overlapping
   let start = requested;
 
   for (const r of rows) {
-    // skip rows without duration (if any) — treat them as zero-length for safety
     if (!r.duration) continue;
     const s = new Date(r.startTime).getTime();
     const e = s + r.duration * 1000;
     const newEnd = start + durationSec * 1000;
-
-    if (start < e && newEnd > s) {
-      // overlap -> move start to end of this existing
-      start = e;
-    }
+    if (start < e && newEnd > s) start = e;
   }
 
   return new Date(start).toISOString();
-}
-
-// Utility: probe duration seconds for a public URL using ffprobe (returns integer seconds or null)
-function probeDurationSeconds(url) {
-  return new Promise((resolve) => {
-    // ffprobe supports http(s) if ffmpeg built with http support
-    ffmpeg.ffprobe(url, (err, meta) => {
-      if (err) {
-        console.error("ffprobe failed:", err?.message || err);
-        return resolve(null);
-      }
-      const dur = Math.floor(meta?.format?.duration || 0);
-      resolve(dur > 0 ? dur : null);
-    });
-  });
 }
 
 // ---------- Routes ----------
@@ -148,87 +114,93 @@ function probeDurationSeconds(url) {
 // Health
 app.get("/", (req, res) => res.send({ ok: true, message: "BStream backend running" }));
 
-// Return single channel list (we keep one channel fixed)
+// Channels
 app.get("/channels", (req, res) => {
-  res.json([
-    {
-      id: "student-tv",
-      name: "On-Campus StudentTV",
-      slug: "studenttv"
-    }
-  ]);
+  res.json([{ id: "student-tv", name: "On-Campus StudentTV", slug: "studenttv" }]);
 });
 
-// returns live status for a channel (currently playing video + elapsed info)
+// Live endpoint
 app.get("/channels/:slug/live", async (req, res) => {
   try {
     const { slug } = req.params;
-    // Only "studenttv" supported for now
     if (slug !== "studenttv" && slug !== "student-tv") {
       return res.status(404).json({ live: false, message: "Channel not found" });
     }
-    // query schedule for channelId 'student-tv'
+
     const nowISO = new Date().toISOString();
     const row = await dbGet(
       `SELECT * FROM videos
-       WHERE channelId = 'student-tv' AND status='ready' AND startTime <= ? AND datetime(startTime, '+' || duration || ' seconds') > ?
+       WHERE channelId='student-tv' AND status='ready' AND startTime <= ? 
+       AND datetime(startTime, '+' || duration || ' seconds') > ?
        ORDER BY datetime(startTime) DESC LIMIT 1`,
       [nowISO, nowISO]
     );
 
-    if (!row) {
-      return res.json({ live: false, message: "No live stream right now" });
-    }
+    if (!row) return res.json({ live: false, message: "No live stream right now" });
 
     const start = new Date(row.startTime);
     const now = new Date();
     const elapsedSec = Math.floor((now - start) / 1000);
+
     return res.json({
       live: true,
-      video: {
-        id: row.id,
-        title: row.title,
-        url: row.url,
-        startTime: row.startTime,
-        duration: row.duration
-      },
-      elapsed: elapsedSec
+      video: { id: row.id, title: row.title, url: row.url, startTime: row.startTime, duration: row.duration },
+      elapsed: elapsedSec,
+      remaining: row.duration - elapsedSec,
     });
   } catch (err) {
     console.error("channels/:slug/live error:", err);
-    res.status(500).json({ live: false, message: "Error" });
+    return res.status(500).json({ live: false, message: "Error" });
   }
 });
 
-// Create presigned upload URL and insert provisional DB row (status 'pending', duration NULL)
+// /now endpoint (legacy)
+app.get("/now", async (req, res) => {
+  try {
+    const nowISO = new Date().toISOString();
+    const row = await dbGet(
+      `SELECT * FROM videos 
+       WHERE channelId='student-tv' AND status='ready' AND startTime <= ? 
+       AND datetime(startTime, '+' || duration || ' seconds') > ? 
+       ORDER BY datetime(startTime) DESC LIMIT 1`,
+      [nowISO, nowISO]
+    );
+
+    if (!row) return res.json({ live: false });
+
+    const start = new Date(row.startTime);
+    const now = new Date();
+    const elapsedSec = Math.floor((now - start) / 1000);
+
+    return res.json({
+      live: true,
+      video: { id: row.id, title: row.title, url: row.url, startTime: row.startTime, duration: row.duration },
+      elapsed: elapsedSec,
+      remaining: row.duration - elapsedSec,
+    });
+  } catch (err) {
+    console.error("/now error:", err);
+    return res.status(500).json({ live: false });
+  }
+});
+
+// Upload URL & provisional DB row
 app.post("/upload-url", checkAuth, async (req, res) => {
   try {
     const { fileName, contentType, title, startTime } = req.body;
-    if (!fileName || !contentType) {
-      return res.status(400).json({ message: "Missing fileName or contentType" });
-    }
+    if (!fileName || !contentType) return res.status(400).json({ message: "Missing fileName or contentType" });
 
-    // requested start (or now)
     const requestedStartISO = startTime ? new Date(startTime).toISOString() : new Date().toISOString();
-
-    // build S3 key and public URL
     const s3key = `${Date.now()}-${fileName}`;
     const publicUrl = `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${encodeURIComponent(s3key)}`;
 
-    // create presigned PUT command (no ACL since bucket owner enforced)
-    const cmd = new PutObjectCommand({
-      Bucket: process.env.S3_BUCKET_NAME,
-      Key: s3key,
-      ContentType: contentType
-    });
-
+    const cmd = new PutObjectCommand({ Bucket: process.env.S3_BUCKET_NAME, Key: s3key, ContentType: contentType });
     const uploadUrl = await getSignedUrl(s3, cmd, { expiresIn: 3600 });
 
-    // Insert provisional DB row; duration is NULL until confirm
     const result = await dbRun(
       `INSERT INTO videos (title, url, s3key, startTime, duration, status, channelId)
        VALUES (?, ?, ?, ?, ?, 'pending', ?)`,
-      [title || fileName, publicUrl, s3key, requestedStartISO, null, "student-tv"]
+      [title || fileName, publicUrl, s3key, requestedStartISO, DEFAULT_DURATION_SEC, "student-tv"]
     );
 
     const video = await dbGet(`SELECT * FROM videos WHERE id = ?`, [result.lastID]);
@@ -239,7 +211,7 @@ app.post("/upload-url", checkAuth, async (req, res) => {
   }
 });
 
-// Confirm upload: probe duration and finalize schedule (sets duration and possibly shifts start to avoid overlaps)
+// Confirm upload: finalize schedule
 app.post("/confirm-upload", checkAuth, async (req, res) => {
   try {
     const { id } = req.body;
@@ -248,20 +220,11 @@ app.post("/confirm-upload", checkAuth, async (req, res) => {
     const video = await dbGet(`SELECT * FROM videos WHERE id = ?`, [id]);
     if (!video) return res.status(404).json({ message: "Video not found" });
 
-    // probe duration (seconds) from the public S3 URL
-    const durationSec = await probeDurationSeconds(video.url);
-    if (!durationSec) {
-      // mark failed
-      await dbRun(`UPDATE videos SET status='failed' WHERE id = ?`, [id]);
-      return res.status(500).json({ message: "Failed to detect video duration" });
-    }
-
-    // compute final start to avoid overlap with existing scheduled videos (exclude this video id)
-    const finalStartISO = await findNextAvailableStart(video.startTime, durationSec, video.channelId, id);
+    const finalStartISO = await findNextAvailableStart(video.startTime, DEFAULT_DURATION_SEC, video.channelId);
 
     await dbRun(
-      `UPDATE videos SET duration = ?, startTime = ?, status = 'ready' WHERE id = ?`,
-      [durationSec, finalStartISO, id]
+      `UPDATE videos SET startTime = ?, status='ready' WHERE id = ?`,
+      [finalStartISO, id]
     );
 
     const updated = await dbGet(`SELECT * FROM videos WHERE id = ?`, [id]);
@@ -272,7 +235,7 @@ app.post("/confirm-upload", checkAuth, async (req, res) => {
   }
 });
 
-// Full schedule for channel (ready + pending)
+// Full schedule
 app.get("/schedule", async (req, res) => {
   try {
     const rows = await dbAll(
@@ -285,22 +248,7 @@ app.get("/schedule", async (req, res) => {
   }
 });
 
-// Return the currently live video (legacy /now endpoint)
-app.get("/now", async (req, res) => {
-  try {
-    const nowISO = new Date().toISOString();
-    const row = await dbGet(
-      `SELECT * FROM videos WHERE channelId='student-tv' AND status='ready' AND startTime <= ? AND datetime(startTime, '+' || duration || ' seconds') > ? ORDER BY datetime(startTime) DESC LIMIT 1`,
-      [nowISO, nowISO]
-    );
-    return res.json(row || {});
-  } catch (err) {
-    console.error("/now error:", err);
-    return res.status(500).json({});
-  }
-});
-
-// Video redirect: returns 302 redirect to S3 public url (no RAM streaming on server)
+// Video redirect
 app.get("/video/:id", async (req, res) => {
   try {
     const row = await dbGet(`SELECT * FROM videos WHERE id = ?`, [req.params.id]);
@@ -312,7 +260,7 @@ app.get("/video/:id", async (req, res) => {
   }
 });
 
-// Admin: list all videos (for debugging)
+// Admin debug
 app.get("/admin/videos", checkAuth, async (req, res) => {
   try {
     const rows = await dbAll(`SELECT * FROM videos ORDER BY datetime(startTime) ASC`);
@@ -325,6 +273,4 @@ app.get("/admin/videos", checkAuth, async (req, res) => {
 
 // Start server
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`BStream backend listening on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`BStream backend listening on port ${PORT}`));
