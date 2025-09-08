@@ -4,6 +4,7 @@ import axios from "axios";
 export default function Upload() {
   const [file, setFile] = useState(null);
   const [title, setTitle] = useState("");
+  const [startTime, setStartTime] = useState("");
   const [message, setMessage] = useState("");
 
   const handleUpload = async () => {
@@ -20,11 +21,12 @@ export default function Upload() {
           fileName: file.name,
           contentType: file.type,
           title,
+          startTime,
         },
         {
           headers: {
             Authorization:
-              "Basic " + btoa("bstreamadmin:BStr3am$ecure2025"), // 👈 backend creds
+              "Basic " + btoa("bstreamadmin:BStr3am$ecure2025"), // 👈 replace with your real backend creds
           },
         }
       );
@@ -53,6 +55,7 @@ export default function Upload() {
       setMessage(`✅ Video uploaded successfully! Title: ${video.title}`);
       setFile(null);
       setTitle("");
+      setStartTime("");
     } catch (err) {
       console.error(err);
       setMessage("❌ Failed to upload video.");
@@ -76,6 +79,14 @@ export default function Upload() {
         placeholder="Video Title"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
+        style={{ marginBottom: "10px", padding: "5px", width: "300px" }}
+      />
+      <br />
+
+      <input
+        type="datetime-local"
+        value={startTime}
+        onChange={(e) => setStartTime(e.target.value)}
         style={{ marginBottom: "10px", padding: "5px", width: "300px" }}
       />
       <br />
