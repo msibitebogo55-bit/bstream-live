@@ -1,113 +1,83 @@
 import React, { useState } from "react";
-import axios from "axios";
 
 export default function Upload() {
   const [file, setFile] = useState(null);
   const [title, setTitle] = useState("");
-  const [startTime, setStartTime] = useState("");
-  const [message, setMessage] = useState("");
+  const [status, setStatus] = useState("");
 
   const handleUpload = async () => {
-    if (!file) {
-      setMessage("Please select a video file.");
-      return;
-    }
+    if (!file) return alert("Pick a file");
 
     try {
-      // Step 1: Get the pre-signed upload URL from backend
-      const res = await axios.post(
-        "https://bstream-backend.onrender.com/upload-url",
-        {
+      setStatus("Requesting upload URL…");
+
+      // 1. Ask backend for presigned URL
+      const res = await fetch("https://bstream-backend.onrender.com/upload-url", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Basic " + btoa("ADMIN_USER:ADMIN_PASS"),
+        },
+        body: JSON.stringify({
           fileName: file.name,
           contentType: file.type,
-          title,
-          startTime,
-        },
-        {
-          headers: {
-            Authorization:
-              "Basic " + btoa("bstreamadmin:BStr3am$ecure2025"), // 👈 replace with your real backend creds
-          },
-        }
-      );
-
-      const { uploadUrl, video } = res.data;
-
-      // Step 2: Upload the actual video file to S3
-      await axios.put(uploadUrl, file, {
-        headers: {
-          "Content-Type": file.type,
-        },
+          title: title || file.name,
+        }),
       });
 
-      // Step 3: Confirm upload to finalize duration & schedule
-      await axios.post(
-        "https://bstream-backend.onrender.com/confirm-upload",
-        { id: video.id },
-        {
-          headers: {
-            Authorization:
-              "Basic " + btoa("bstreamadmin:BStr3am$ecure2025"),
-          },
-        }
-      );
+      if (!res.ok) {
+        throw new Error("upload-url failed: " + (await res.text()));
+      }
+      const { uploadUrl, video } = await res.json();
 
-      setMessage(`✅ Video uploaded successfully! Title: ${video.title}`);
-      setFile(null);
-      setTitle("");
-      setStartTime("");
+      // 2. PUT actual file to S3 presigned URL
+      setStatus("Uploading to S3…");
+      const putRes = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      if (!putRes.ok) {
+        throw new Error("S3 upload failed: " + putRes.status);
+      }
+
+      // 3. Confirm upload so backend probes duration
+      setStatus("Confirming upload…");
+      const confirmRes = await fetch("https://bstream-backend.onrender.com/confirm-upload", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Basic " + btoa("ADMIN_USER:ADMIN_PASS"),
+        },
+        body: JSON.stringify({ id: video.id }),
+      });
+
+      if (!confirmRes.ok) {
+        throw new Error("confirm-upload failed: " + (await confirmRes.text()));
+      }
+
+      const confirmed = await confirmRes.json();
+      console.log("Confirmed video:", confirmed);
+      setStatus("✅ Upload complete, video scheduled!");
     } catch (err) {
       console.error(err);
-      setMessage("❌ Failed to upload video.");
+      setStatus("❌ Error: " + err.message);
     }
   };
 
   return (
-    <div style={{ padding: "30px", fontFamily: "Arial, sans-serif" }}>
-      <h1 style={{ color: "#ff6600", marginBottom: "20px" }}>Upload Video</h1>
-
-      <input
-        type="file"
-        accept="video/*"
-        onChange={(e) => setFile(e.target.files[0])}
-        style={{ marginBottom: "10px" }}
-      />
-      <br />
-
-      <input
-        type="text"
-        placeholder="Video Title"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        style={{ marginBottom: "10px", padding: "5px", width: "300px" }}
-      />
-      <br />
-
-      <input
-        type="datetime-local"
-        value={startTime}
-        onChange={(e) => setStartTime(e.target.value)}
-        style={{ marginBottom: "10px", padding: "5px", width: "300px" }}
-      />
-      <br />
-
+    <div className="p-4">
+      <h2 className="text-xl mb-2">Upload video</h2>
+      <input type="text" placeholder="Title" value={title}
+        onChange={(e) => setTitle(e.target.value)} className="border p-1 mb-2 block" />
+      <input type="file" accept="video/*" onChange={(e) => setFile(e.target.files[0])} />
       <button
         onClick={handleUpload}
-        style={{
-          padding: "10px 20px",
-          background: "#ff6600",
-          color: "#fff",
-          border: "none",
-          borderRadius: "5px",
-          cursor: "pointer",
-        }}
+        className="bg-blue-500 text-white px-4 py-2 rounded mt-2"
       >
         Upload
       </button>
-
-      {message && (
-        <div style={{ marginTop: "20px", color: "#fff" }}>{message}</div>
-      )}
+      <div className="mt-2">{status}</div>
     </div>
   );
 }
