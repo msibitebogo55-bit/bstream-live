@@ -4,6 +4,7 @@ import axios from "axios";
 export default function Upload() {
   const [file, setFile] = useState(null);
   const [title, setTitle] = useState("");
+  const [startTime, setStartTime] = useState("");
   const [message, setMessage] = useState("");
 
   const handleUpload = async () => {
@@ -20,6 +21,7 @@ export default function Upload() {
           fileName: file.name,
           contentType: file.type,
           title,
+          startTime, // include requested start time
         },
         {
           headers: {
@@ -38,10 +40,10 @@ export default function Upload() {
         },
       });
 
-      // Step 3: Confirm upload so backend probes duration & schedules
+      // Step 3: Confirm upload and set default duration (10 minutes)
       await axios.post(
         "https://bstream-backend.onrender.com/confirm-upload",
-        { id: video.id },
+        { id: video.id, defaultDuration: 600 }, // 600 seconds = 10 minutes
         {
           headers: {
             Authorization:
@@ -53,6 +55,7 @@ export default function Upload() {
       setMessage(`✅ Video uploaded and scheduled! Title: ${video.title}`);
       setFile(null);
       setTitle("");
+      setStartTime("");
     } catch (err) {
       console.error(err);
       setMessage("❌ Failed to upload video.");
@@ -76,6 +79,14 @@ export default function Upload() {
         placeholder="Video Title"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
+        style={{ marginBottom: "10px", padding: "5px", width: "300px" }}
+      />
+      <br />
+
+      <input
+        type="datetime-local"
+        value={startTime}
+        onChange={(e) => setStartTime(e.target.value)}
         style={{ marginBottom: "10px", padding: "5px", width: "300px" }}
       />
       <br />
