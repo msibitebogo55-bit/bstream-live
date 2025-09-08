@@ -13,7 +13,7 @@ export default function Upload() {
     }
 
     try {
-      // Step 1: Request pre-signed upload URL
+      // Step 1: Get the pre-signed upload URL from backend
       const res = await axios.post(
         "https://bstream-backend.onrender.com/upload-url",
         {
@@ -24,21 +24,21 @@ export default function Upload() {
         {
           headers: {
             Authorization:
-              "Basic " + btoa("bstreamadmin:BStr3am$ecure2025"),
+              "Basic " + btoa("bstreamadmin:BStr3am$ecure2025"), // 👈 backend creds
           },
         }
       );
 
       const { uploadUrl, video } = res.data;
 
-      // Step 2: Upload video to S3
+      // Step 2: Upload the actual video file to S3
       await axios.put(uploadUrl, file, {
         headers: {
           "Content-Type": file.type,
         },
       });
 
-      // Step 3: Confirm upload so backend probes duration & schedules
+      // Step 3: Confirm upload to finalize duration & schedule
       await axios.post(
         "https://bstream-backend.onrender.com/confirm-upload",
         { id: video.id },
@@ -50,7 +50,7 @@ export default function Upload() {
         }
       );
 
-      setMessage(`✅ Video uploaded and scheduled! Title: ${video.title}`);
+      setMessage(`✅ Video uploaded successfully! Title: ${video.title}`);
       setFile(null);
       setTitle("");
     } catch (err) {
