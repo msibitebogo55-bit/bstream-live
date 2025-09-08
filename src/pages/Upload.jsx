@@ -26,9 +26,8 @@ export default function Upload() {
           duration,
         },
         {
-          auth: {
-            username: process.env.REACT_APP_ADMIN_USER,
-            password: process.env.REACT_APP_ADMIN_PASS,
+          headers: {
+            Authorization: "Basic " + btoa("bstreamadmin:BStr3am$ecure2025"), // 👈 replace with your real backend creds
           },
         }
       );
@@ -42,25 +41,25 @@ export default function Upload() {
         },
       });
 
-      setMessage(`Video uploaded successfully! Title: ${video.title}`);
+      setMessage(`✅ Video uploaded successfully! Title: ${video.title}`);
       setFile(null);
       setTitle("");
       setStartTime("");
       setDuration(3600);
     } catch (err) {
       console.error(err);
-      setMessage("Failed to upload video.");
+      setMessage("❌ Failed to upload video.");
     }
   };
 
   return (
     <div style={{ padding: "30px", fontFamily: "Arial, sans-serif" }}>
       <h1 style={{ color: "#ff6600", marginBottom: "20px" }}>Upload Video</h1>
-      
+
       <input
         type="file"
         accept="video/*"
-        onChange={e => setFile(e.target.files[0])}
+        onChange={(e) => setFile(e.target.files[0])}
         style={{ marginBottom: "10px" }}
       />
       <br />
@@ -69,16 +68,15 @@ export default function Upload() {
         type="text"
         placeholder="Video Title"
         value={title}
-        onChange={e => setTitle(e.target.value)}
+        onChange={(e) => setTitle(e.target.value)}
         style={{ marginBottom: "10px", padding: "5px", width: "300px" }}
       />
       <br />
 
       <input
         type="datetime-local"
-        placeholder="Start Time"
         value={startTime}
-        onChange={e => setStartTime(e.target.value)}
+        onChange={(e) => setStartTime(e.target.value)}
         style={{ marginBottom: "10px", padding: "5px", width: "300px" }}
       />
       <br />
@@ -87,7 +85,7 @@ export default function Upload() {
         type="number"
         placeholder="Duration (seconds)"
         value={duration}
-        onChange={e => setDuration(e.target.value)}
+        onChange={(e) => setDuration(e.target.value)}
         style={{ marginBottom: "10px", padding: "5px", width: "300px" }}
       />
       <br />
@@ -106,7 +104,9 @@ export default function Upload() {
         Upload
       </button>
 
-      {message && <div style={{ marginTop: "20px", color: "#fff" }}>{message}</div>}
+      {message && (
+        <div style={{ marginTop: "20px", color: "#fff" }}>{message}</div>
+      )}
     </div>
   );
 }
