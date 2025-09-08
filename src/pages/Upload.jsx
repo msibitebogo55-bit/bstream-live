@@ -21,12 +21,11 @@ export default function Upload() {
           fileName: file.name,
           contentType: file.type,
           title,
-          startTime, // include requested start time
+          startTime: startTime || null, // allow backend to use now if empty
         },
         {
           headers: {
-            Authorization:
-              "Basic " + btoa("bstreamadmin:BStr3am$ecure2025"),
+            Authorization: "Basic " + btoa("bstreamadmin:BStr3am$ecure2025"),
           },
         }
       );
@@ -35,19 +34,16 @@ export default function Upload() {
 
       // Step 2: Upload video to S3
       await axios.put(uploadUrl, file, {
-        headers: {
-          "Content-Type": file.type,
-        },
+        headers: { "Content-Type": file.type },
       });
 
-      // Step 3: Confirm upload and set default duration (10 minutes)
+      // Step 3: Confirm upload so backend finalizes schedule
       await axios.post(
         "https://bstream-backend.onrender.com/confirm-upload",
-        { id: video.id, defaultDuration: 600 }, // 600 seconds = 10 minutes
+        { id: video.id },
         {
           headers: {
-            Authorization:
-              "Basic " + btoa("bstreamadmin:BStr3am$ecure2025"),
+            Authorization: "Basic " + btoa("bstreamadmin:BStr3am$ecure2025"),
           },
         }
       );
@@ -83,6 +79,9 @@ export default function Upload() {
       />
       <br />
 
+      <label style={{ display: "block", marginBottom: "5px" }}>
+        Start Date & Time (optional):
+      </label>
       <input
         type="datetime-local"
         value={startTime}
@@ -106,7 +105,9 @@ export default function Upload() {
       </button>
 
       {message && (
-        <div style={{ marginTop: "20px", color: "#fff" }}>{message}</div>
+        <div style={{ marginTop: "20px", color: message.startsWith("✅") ? "green" : "red" }}>
+          {message}
+        </div>
       )}
     </div>
   );
