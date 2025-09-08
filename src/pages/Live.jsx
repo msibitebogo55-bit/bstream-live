@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
 
 export default function Live() {
   const videoRef = useRef(null);
@@ -7,19 +6,16 @@ export default function Live() {
   const [schedule, setSchedule] = useState([]);
   const [elapsed, setElapsed] = useState(0);
 
-  const location = useLocation();
-  const channelId = location.state?.channelId;
+  // FIXED CHANNEL (On-Campus StudentTV)
+  const channelId = "student-tv"; // <-- use the exact ID your backend uses
 
   const fetchSchedule = async () => {
     try {
       const res = await fetch("https://bstream-backend.onrender.com/schedule");
       const data = await res.json();
 
-      // Filter schedule for selected channel
-      const channelSchedule = channelId
-        ? data.filter(v => v.channelId === channelId)
-        : data;
-
+      // Filter schedule for this channel only
+      const channelSchedule = data.filter((v) => v.channelId === channelId);
       setSchedule(channelSchedule);
 
       const now = new Date();
@@ -45,7 +41,7 @@ export default function Live() {
     fetchSchedule();
     const interval = setInterval(fetchSchedule, 1000);
     return () => clearInterval(interval);
-  }, [channelId]);
+  }, []);
 
   useEffect(() => {
     const videoEl = videoRef.current;
@@ -67,7 +63,7 @@ export default function Live() {
 
   return (
     <div style={{ maxWidth: "900px", margin: "20px auto", fontFamily: "Arial, sans-serif" }}>
-      <h1>Live Stream</h1>
+      <h1>On-Campus StudentTV Live</h1>
 
       {currentVideo ? (
         <div>
@@ -87,7 +83,9 @@ export default function Live() {
           <div style={{ marginTop: "10px", fontWeight: "bold" }}>
             Now Playing: {currentVideo.title}
           </div>
-          <div>Elapsed: {Math.floor(elapsed / 60)}:{("0" + (elapsed % 60)).slice(-2)}</div>
+          <div>
+            Elapsed: {Math.floor(elapsed / 60)}:{("0" + (elapsed % 60)).slice(-2)}
+          </div>
         </div>
       ) : (
         <div>No live video currently</div>
