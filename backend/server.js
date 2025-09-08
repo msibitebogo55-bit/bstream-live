@@ -15,10 +15,9 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// ------- SQLite (works w/ or w/o Render disk) -------
+// ------- SQLite -------
 const DATA_DIR =
-  process.env.RENDER_PERSISTENT_DISK_PATH ||
-  path.join(__dirname, "data");
+  process.env.RENDER_PERSISTENT_DISK_PATH || path.join(__dirname, "data");
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
@@ -34,13 +33,14 @@ db.serialize(() => {
       s3key TEXT NOT NULL,
       startTime TEXT NOT NULL,
       duration INTEGER,
-      status TEXT NOT NULL DEFAULT 'pending' -- pending|ready|failed
+      status TEXT NOT NULL DEFAULT 'pending',
+      channelId TEXT NOT NULL DEFAULT 'student-tv'
     )
   `);
 });
 
 // Promisified helpers
-const dbRun = (sql, params=[]) =>
+const dbRun = (sql, params = []) =>
   new Promise((resolve, reject) => {
     db.run(sql, params, function (err) {
       if (err) return reject(err);
@@ -48,7 +48,7 @@ const dbRun = (sql, params=[]) =>
     });
   });
 
-const dbGet = (sql, params=[]) =>
+const dbGet = (sql, params = []) =>
   new Promise((resolve, reject) => {
     db.get(sql, params, function (err, row) {
       if (err) return reject(err);
@@ -56,7 +56,7 @@ const dbGet = (sql, params=[]) =>
     });
   });
 
-const dbAll = (sql, params=[]) =>
+const dbAll = (sql, params = []) =>
   new Promise((resolve, reject) => {
     db.all(sql, params, function (err, rows) {
       if (err) return reject(err);
@@ -73,11 +73,14 @@ const s3 = new S3Client({
   },
 });
 
-// ------- Basic Auth (admin endpoints) -------
+// ------- Basic Auth -------
 function checkAuth(req, res, next) {
   const b64auth = (req.headers.authorization || "").split(" ")[1] || "";
-  const [login, password] = Buffer.from(b64auth, "base64").toString().split(":");
-  if (login === process.env.ADMIN_USER && password === process.env.ADMIN_PASS) return next();
+  const [login, password] = Buffer.from(b64auth, "base64")
+    .toString()
+    .split(":");
+  if (login === process.env.ADMIN_USER && password === process.env.ADMIN_PASS)
+    return next();
   res.set("WWW-Authenticate", 'Basic realm="Admin Area"');
   res.status(401).send("Authentication required.");
 }
@@ -85,60 +88,52 @@ function checkAuth(req, res, next) {
 // ------- Helper: resolve schedule conflicts -------
 async function nextAvailableStart(requestedISO, durationSec) {
   const requested = new Date(requestedISO);
-  const rows = await dbAll(`SELECT startTime, duration FROM videos WHERE status IN ('pending','ready') ORDER BY startTime ASC`);
+  const rows = await dbAll(
+    `SELECT startTime, duration FROM videos WHERE status IN ('pending','ready') ORDER BY startTime ASC`
+  );
   let start = requested.getTime();
 
   for (const r of rows) {
-    if (!r.duration) continue; // pending duration, skip overlap calc
+    if (!r.duration) continue;
     const s = new Date(r.startTime).getTime();
     const e = s + r.duration * 1000;
     const newEnd = start + durationSec * 1000;
-
-    // overlap if [start,newEnd] crosses [s,e]
-    if (start < e && newEnd > s) {
-      start = e; // push to end of existing
-    }
+    if (start < e && newEnd > s) start = e;
   }
+
   return new Date(start).toISOString();
 }
 
 // ------- 1) Create S3 presigned URL & provisional DB row -------
 app.post("/upload-url", checkAuth, async (req, res) => {
   try {
-    const { fileName, contentType, title, startTime, duration } = req.body;
-    if (!fileName || !contentType) {
+    const { fileName, contentType, title, startTime } = req.body;
+    if (!fileName || !contentType)
       return res.status(400).json({ message: "Missing fileName or contentType" });
-    }
 
-    // If no startTime passed, start now. If duration passed, use it provisionally; final comes from probe.
-    const requestedStart = startTime ? new Date(startTime).toISOString() : new Date().toISOString();
-    const provisionalDur = parseInt(duration) > 0 ? parseInt(duration) : null;
+    const requestedStart = startTime
+      ? new Date(startTime).toISOString()
+      : new Date().toISOString();
 
-    // pick a unique key and final scheduled start that avoids overlap if we already know duration
     const s3key = `${Date.now()}-${fileName}`;
-    const publicUrl = `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${encodeURIComponent(s3key)}`;
-
-    // If we have a provisional duration, push start to avoid conflict; otherwise just record requested time
-    const scheduledStart = provisionalDur
-      ? await nextAvailableStart(requestedStart, provisionalDur)
-      : requestedStart;
+    const publicUrl = `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${encodeURIComponent(
+      s3key
+    )}`;
 
     const cmd = new PutObjectCommand({
       Bucket: process.env.S3_BUCKET_NAME,
       Key: s3key,
-      ContentType: contentType
+      ContentType: contentType,
     });
     const uploadUrl = await getSignedUrl(s3, cmd, { expiresIn: 3600 });
 
-    // Insert provisional row (duration may be null until probe)
     const result = await dbRun(
-      `INSERT INTO videos (title, url, s3key, startTime, duration, status)
-       VALUES (?, ?, ?, ?, ?, 'pending')`,
-      [title || fileName, publicUrl, s3key, scheduledStart, provisionalDur]
+      `INSERT INTO videos (title, url, s3key, startTime, duration, status, channelId)
+       VALUES (?, ?, ?, ?, ?, 'pending', ?)`,
+      [title || fileName, publicUrl, s3key, requestedStart, null, "student-tv"]
     );
 
     const video = await dbGet(`SELECT * FROM videos WHERE id = ?`, [result.lastID]);
-
     res.json({ uploadUrl, video });
   } catch (err) {
     console.error("upload-url error:", err);
@@ -155,7 +150,6 @@ app.post("/confirm-upload", checkAuth, async (req, res) => {
     const video = await dbGet(`SELECT * FROM videos WHERE id = ?`, [id]);
     if (!video) return res.status(404).json({ message: "Video not found" });
 
-    // probe public S3 URL; ffprobe can read http(s)
     const durationSec = await new Promise((resolve) => {
       ffmpeg.ffprobe(video.url, (err, meta) => {
         if (err) {
@@ -167,18 +161,14 @@ app.post("/confirm-upload", checkAuth, async (req, res) => {
       });
     });
 
-    // if duration missing, keep previous; else update
-    let finalDuration = durationSec || video.duration || 3600;
+    if (!durationSec)
+      return res.status(500).json({ message: "Failed to detect video duration" });
 
-    // if previously no duration, now we know it -> push start to avoid conflicts
-    let finalStart = video.startTime;
-    if (!video.duration && durationSec) {
-      finalStart = await nextAvailableStart(video.startTime, finalDuration);
-    }
+    const finalStart = await nextAvailableStart(video.startTime, durationSec);
 
     await dbRun(
       `UPDATE videos SET duration = ?, startTime = ?, status = 'ready' WHERE id = ?`,
-      [finalDuration, finalStart, id]
+      [durationSec, finalStart, id]
     );
 
     const updated = await dbGet(`SELECT * FROM videos WHERE id = ?`, [id]);
@@ -195,9 +185,7 @@ app.get("/now", async (req, res) => {
     const nowISO = new Date().toISOString();
     const row = await dbGet(
       `SELECT * FROM videos
-       WHERE status='ready'
-       AND startTime <= ?
-       AND datetime(startTime, '+' || duration || ' seconds') >= ?
+       WHERE status='ready' AND startTime <= ? AND datetime(startTime, '+' || duration || ' seconds') >= ?
        ORDER BY startTime DESC
        LIMIT 1`,
       [nowISO, nowISO]
@@ -213,9 +201,7 @@ app.get("/now", async (req, res) => {
 app.get("/schedule", async (req, res) => {
   try {
     const rows = await dbAll(
-      `SELECT * FROM videos
-       WHERE status IN ('pending','ready')
-       ORDER BY startTime ASC`
+      `SELECT * FROM videos WHERE status IN ('pending','ready') AND channelId='student-tv' ORDER BY startTime ASC`
     );
     res.json(rows);
   } catch (err) {
@@ -224,7 +210,7 @@ app.get("/schedule", async (req, res) => {
   }
 });
 
-// ------- 5) Video redirect (serves public S3 URL) -------
+// ------- 5) Video redirect -------
 app.get("/video/:id", async (req, res) => {
   try {
     const row = await dbGet(`SELECT * FROM videos WHERE id = ?`, [req.params.id]);
@@ -236,11 +222,7 @@ app.get("/video/:id", async (req, res) => {
   }
 });
 
+// ------- Start Server -------
 const PORT = process.env.PORT || 5000;
-
-app.get("/", (req, res) => {
-  res.send("Backed is running");
-});
-app.listen(PORT, () => {
-  console.log(`Backend running on :${PORT}`);
-});
+app.get("/", (req, res) => res.send("Backend is running"));
+app.listen(PORT, () => console.log(`Backend running on port ${PORT}`));
