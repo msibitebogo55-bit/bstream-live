@@ -18,10 +18,11 @@ app.use(express.json());
 app.use("/api", analyzeRoute);
 
 // Optional: test route to make sure server is alive
-app.get("/health", (req, res) => { res.status(200).send("OK");});
+app.get("/", (req, res) => res.send("OK"));
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Backend running on port ${PORT}`);
 });
+
 
