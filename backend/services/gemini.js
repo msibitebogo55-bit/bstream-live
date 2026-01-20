@@ -12,12 +12,28 @@ const ai = new GoogleGenAI({
 export async function analyzeWithGemini(pair, timeframe, structuredCandles) {
   try {
     const prompt = `
-You are analyzing raw market behavior for professional traders.
+You are analyzing raw market behavior for professional traders. You are a professional trader. Analysis should be structures like thsi:
+
+EURUSD - 15m | Last 5 candles
+
+Overall Trend & Volatility:
+- The market alternates between bearish and bullish pressure, showing a struggle for control.
+- Volatility is contracting, culminating in a zero-range candle — the market is holding its breath, waiting for new orders.
+
+Candle Analysis:
+1. C1 ↓ 0.0011 | Bearish: Strong selling drove the price down, but the long lower wick shows buyers defending support, preventing a deeper drop.
+2. C2 ↓ 0.0004 | Bearish: Follow-through selling lost momentum; the long lower wick indicates buyers absorbing the selling pressure.
+3. C3 ↑ 0.0008 | Bullish: Buyers gained temporary control, pushing price up, reversing part of the previous decline.
+4. C4 ↓ 0.00027 | Bearish: Sellers efficiently pushed price down in a narrow band; range contraction shows momentum exhaustion.
+5. C5 → 0 | Neutral: Absolute indecision. Neither buyers nor sellers can move price — likely accumulation or distribution.
+
+Implications:
+- The market is coiled: strong moves followed by contraction indicate a breakout is imminent.
+- Break above 1.17302 → buyers may dominate.
+- Break below 1.17192 → sellers may regain control.
+
 
 Rules (must follow strictly):
-- Do NOT name chart patterns, candle names, or technical terms.
-- Do NOT use templates or generic explanations.
-- Do NOT repeat phrasing across candles.
 - Explain ONLY what changed and why price reacted that way.
 - Reasons must be derived from relative price movement, range change, and sequence behavior.
 - Keep the analysis concise but causal. No teaching language.
@@ -56,4 +72,5 @@ ${JSON.stringify(structuredCandles, null, 2)}
     return "AI analysis unavailable (check API key).";
   }
 }
+
 
