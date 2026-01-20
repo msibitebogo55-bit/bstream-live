@@ -16,7 +16,7 @@ export default function App() {
       setAnalysis(data.analysis);
       setCandles(data.candles);
     } catch {
-      alert("Analysis failed. Check backend.");
+      alert("Analysis temporarily Unvailable.");
     } finally {
       setLoading(false);
     }
@@ -93,4 +93,5 @@ export default function App() {
       )}
     </div>
   );
+
 }
