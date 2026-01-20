@@ -6,7 +6,9 @@ import analyzeRoute from "./routes/analyze.js";
 dotenv.config();
 
 const app = express();
-app.use(cors());
+app.use(cors({ 
+  origin: "https://tradex-te4p.onrender.com"
+}));
 app.use(express.json());
 
 app.use("/api", analyzeRoute);
@@ -15,3 +17,4 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Backend running on port ${PORT}`);
 });
+
