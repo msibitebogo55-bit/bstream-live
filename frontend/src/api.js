@@ -2,7 +2,7 @@
 export async function fetchAnalysis(symbol = "EUR_USD", timeframe = "15min") {
   try {
     const res = await fetch(
-      `/api/analyze?pair=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}`
+      `https://tradex-analysis.onrender.com/api/analyze?pair=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}`
     );
 
     if (!res.ok) {
@@ -15,3 +15,4 @@ export async function fetchAnalysis(symbol = "EUR_USD", timeframe = "15min") {
     throw err;
   }
 }
+
