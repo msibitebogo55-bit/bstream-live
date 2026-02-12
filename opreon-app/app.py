@@ -1,6 +1,8 @@
 import os
 import re
 import sqlite3
+import smtplib
+from email.message import EmailMessage
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -8,19 +10,17 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
-APP_NAME = "opreon"
 DB_PATH = os.getenv("DB_PATH", "leads.db")
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*")  # set later to your domain
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*")
 
 EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 app = FastAPI(title="Opreon Lead API")
 
-# Very basic in memory rate limiting per IP
-# Good enough for MVP, not for serious scale
+# Simple in memory rate limiting per IP
 RATE_LIMIT_WINDOW_SEC = 60
 RATE_LIMIT_MAX = 10
-_ip_bucket = {}  # ip -> list[timestamps]
+_ip_bucket: dict[str, list[float]] = {}
 
 
 class LeadIn(BaseModel):
@@ -30,7 +30,7 @@ class LeadIn(BaseModel):
     email: str = Field(min_length=5, max_length=200)
     system: Optional[str] = Field(default=None, max_length=120)
     workflow: str = Field(min_length=10, max_length=4000)
-    # Honeypot field: should be empty. Bots often fill it.
+    # Honeypot. Must remain empty.
     website: Optional[str] = Field(default=None, max_length=200)
 
 
@@ -70,9 +70,30 @@ def _rate_limit(ip: str) -> None:
     _ip_bucket[ip] = bucket
 
 
+def send_lead_email(to_email: str, subject: str, body: str) -> None:
+    host = os.getenv("SMTP_HOST")
+    port = int(os.getenv("SMTP_PORT", "587"))
+    user = os.getenv("SMTP_USER")
+    password = os.getenv("SMTP_PASS")
+
+    if not (host and user and password and to_email):
+        return  # email not configured
+
+    msg = EmailMessage()
+    msg["From"] = user
+    msg["To"] = to_email
+    msg["Subject"] = subject
+    msg.set_content(body)
+
+    with smtplib.SMTP(host, port) as s:
+        s.starttls()
+        s.login(user, password)
+        s.send_message(msg)
+
+
 @app.middleware("http")
 async def cors_middleware(request: Request, call_next):
-    # Minimal CORS handling
+    # Minimal CORS
     if request.method == "OPTIONS":
         from fastapi.responses import Response
         r = Response()
@@ -94,7 +115,6 @@ async def cors_middleware(request: Request, call_next):
 
 @app.get("/", response_class=HTMLResponse)
 def home():
-    # Serve the landing page
     try:
         with open("index.html", "r", encoding="utf-8") as f:
             return f.read()
@@ -107,8 +127,8 @@ async def create_lead(payload: LeadIn, request: Request):
     ip = request.client.host if request.client else "unknown"
     _rate_limit(ip)
 
+    # Honeypot
     if payload.website and payload.website.strip():
-        # Honeypot triggered
         raise HTTPException(status_code=400, detail="Invalid submission.")
 
     if not EMAIL_REGEX.match(payload.email.strip()):
@@ -136,6 +156,27 @@ async def create_lead(payload: LeadIn, request: Request):
             ),
         )
         conn.commit()
+
+    # Email notification
+    notify_to = os.getenv("NOTIFY_TO_EMAIL", "mtebogo1@hotmail.com")
+    subject = f"Opreon Lead: {payload.company}"
+    body = (
+        "New lead received\n\n"
+        f"Name: {payload.name}\n"
+        f"Company: {payload.company}\n"
+        f"Role: {payload.role or '-'}\n"
+        f"Email: {payload.email}\n"
+        f"System: {payload.system or '-'}\n\n"
+        "Workflow:\n"
+        f"{payload.workflow}\n\n"
+        f"Time (UTC): {created_at}\n"
+        f"IP: {ip}\n"
+    )
+    try:
+        send_lead_email(notify_to, subject, body)
+    except Exception:
+        # Do not fail the request if email fails
+        pass
 
     return {"ok": True, "message": "Lead received."}
 
