@@ -3,13 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Opreon | AI Agents for Operations</title>
+  <title>Opreon | AI Agents</title>
   <meta name="description" content="Opreon builds custom AI agents that automate operational workflows and integrate into existing business systems." />
 
   <style>
     :root{
       --bg:#0b0b10;
-      --card:#11111a;
       --text:#f4f4f7;
       --muted:#b8b8c6;
       --line:#26263a;
@@ -20,9 +19,10 @@
     body{
       margin:0;
       font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji","Segoe UI Emoji";
-      background: radial-gradient(1200px 700px at 20% -10%, rgba(124,92,255,.35), transparent 60%),
-                  radial-gradient(900px 600px at 90% 0%, rgba(46,229,157,.20), transparent 55%),
-                  var(--bg);
+      background:
+        radial-gradient(1200px 700px at 20% -10%, rgba(124,92,255,.35), transparent 60%),
+        radial-gradient(900px 600px at 90% 0%, rgba(46,229,157,.20), transparent 55%),
+        var(--bg);
       color:var(--text);
     }
     a{ color:inherit; text-decoration:none; }
@@ -32,22 +32,14 @@
       display:flex; align-items:center; justify-content:space-between;
       padding: 14px 0 10px;
     }
-    .brand{
-      display:flex; flex-direction:column; gap:6px;
-    }
-    .logoRow{
-      display:flex; align-items:center; gap:10px;
-    }
+    .brand{ display:flex; flex-direction:column; gap:6px; }
+    .logoRow{ display:flex; align-items:center; gap:10px; }
     .mark{
       width:10px; height:10px; border-radius:99px;
       background: linear-gradient(135deg, var(--accent), var(--accent2));
       box-shadow: 0 0 22px rgba(124,92,255,.45);
     }
-    .name{
-      font-weight:900;
-      letter-spacing:.4px;
-      font-size: 16px;
-    }
+    .name{ font-weight:900; letter-spacing:.4px; font-size: 16px; }
     .tag{
       font-size: 12px;
       color: var(--muted);
@@ -92,6 +84,7 @@
       line-height: 1.5;
       margin: 0 0 18px;
     }
+
     .ctaRow{
       display:flex;
       gap: 12px;
@@ -210,11 +203,13 @@
     textarea{ min-height: 120px; resize: vertical; }
     input::placeholder, textarea::placeholder{ color: rgba(184,184,198,.75); }
 
-    .formHelp{
+    .status{
       color: var(--muted);
       font-size: 13px;
       line-height:1.4;
     }
+    .status.ok{ color: rgba(46,229,157,.9); }
+    .status.bad{ color: rgba(255,120,120,.95); }
 
     .footer{
       border-top: 1px solid var(--line);
@@ -281,7 +276,7 @@
             <span>We map triggers, data, decisions, and actions into an engineered agent.</span>
           </div>
           <div class="pill">
-            <b>Integration + guardrails</b>
+            <b>Integration plus guardrails</b>
             <span>Deterministic rules, limits, audit logs, and monitoring are part of the build.</span>
           </div>
           <div class="pill" style="margin-bottom:0;">
@@ -348,17 +343,12 @@
         <h2>Request an Automation Assessment</h2>
         <p>Fill this in and we will respond with the fastest path to a working agent.</p>
 
-        <!--
-          This form currently does NOT submit to a server.
-          Quick options:
-          - Use Formspree and set form action to your endpoint
-          - Or keep mailto for quick validation
-        -->
         <form id="leadForm">
           <div class="row2">
             <input name="name" placeholder="Name" required />
             <input name="company" placeholder="Company" required />
           </div>
+
           <div class="row2">
             <input name="role" placeholder="Role (optional)" />
             <input name="email" type="email" placeholder="Email" required />
@@ -376,29 +366,29 @@
 
           <textarea name="workflow" placeholder="Describe the workflow to automate. What triggers it, what data is used, and what outcome you want." required></textarea>
 
-          <button class="btn primary" type="submit">Send</button>
-          <div class="formHelp" id="formHelp">
-            This demo page opens your email app with the message filled in. For real submissions, connect the form to Formspree or a backend endpoint.
-          </div>
+          <!-- Honeypot field (bots fill this, humans never see it) -->
+          <input name="website" style="display:none" tabindex="-1" autocomplete="off" />
+
+          <button class="btn primary" id="submitBtn" type="submit">Send</button>
+          <div class="status" id="formHelp">This form submits directly to our backend.</div>
         </form>
       </section>
 
       <div class="footer">
         <div>© <span id="year"></span> Opreon. A PotchPost company.</div>
-        <div>Email: <span id="emailText">hello@opreon.ai</span></div>
+        <div>Email: <span id="emailText">mtebogo1@hotmail.com</span></div>
       </div>
     </main>
   </div>
 
   <script>
-    // Set year
+    // Year
     document.getElementById("year").textContent = new Date().getFullYear();
 
-    // Update email here
-    const email = "hello@potchpost.co.za"; // change if you want
+    // Email display + copy
+    const email = "mtebogo1@hotmail.com";
     document.getElementById("emailText").textContent = email;
 
-    // Copy email
     document.getElementById("copyEmailBtn").addEventListener("click", async () => {
       try {
         await navigator.clipboard.writeText(email);
@@ -408,28 +398,46 @@
       }
     });
 
-    // Lead capture without backend:
-    // opens mailto with prefilled message
-    document.getElementById("leadForm").addEventListener("submit", (e) => {
+    // Submit to backend endpoint
+    const form = document.getElementById("leadForm");
+    const help = document.getElementById("formHelp");
+    const submitBtn = document.getElementById("submitBtn");
+
+    function setStatus(text, kind){
+      help.textContent = text;
+      help.classList.remove("ok","bad");
+      if(kind) help.classList.add(kind);
+    }
+
+    form.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const data = Object.fromEntries(new FormData(e.target).entries());
+      submitBtn.disabled = true;
+      setStatus("Sending...", "");
 
-      const subject = encodeURIComponent("Opreon Automation Assessment Request");
-      const body = encodeURIComponent(
-`Name: ${data.name}
-Company: ${data.company}
-Role: ${data.role || "-"}
-Email: ${data.email}
-System: ${data.system || "-"}
+      const data = Object.fromEntries(new FormData(form).entries());
 
-Workflow:
-${data.workflow}
-`);
-      window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+      try {
+        const res = await fetch("/api/lead", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        });
 
-      e.target.reset();
-      document.getElementById("formHelp").textContent =
-        "Opened your email app with the message filled in. For real submissions, connect the form to a form service or backend endpoint.";
+        const out = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          setStatus(out.detail || out.message || "Failed to send. Try again.", "bad");
+          submitBtn.disabled = false;
+          return;
+        }
+
+        form.reset();
+        setStatus("Submitted. We will reply soon.", "ok");
+      } catch (err) {
+        setStatus("Network error. Please try again.", "bad");
+      } finally {
+        submitBtn.disabled = false;
+      }
     });
   </script>
 </body>
