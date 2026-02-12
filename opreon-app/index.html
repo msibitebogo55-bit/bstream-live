@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Opreon | AI Agents for Operations</title>
+  <meta name="description" content="Opreon builds custom AI agents that automate operational workflows and integrate into existing business systems." />
+
+  <style>
+    :root{
+      --bg:#0b0b10;
+      --card:#11111a;
+      --text:#f4f4f7;
+      --muted:#b8b8c6;
+      --line:#26263a;
+      --accent:#7c5cff;
+      --accent2:#2ee59d;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      background: radial-gradient(1200px 700px at 20% -10%, rgba(124,92,255,.35), transparent 60%),
+                  radial-gradient(900px 600px at 90% 0%, rgba(46,229,157,.20), transparent 55%),
+                  var(--bg);
+      color:var(--text);
+    }
+    a{ color:inherit; text-decoration:none; }
+    .wrap{ max-width: 1080px; margin: 0 auto; padding: 22px; }
+
+    header{
+      display:flex; align-items:center; justify-content:space-between;
+      padding: 14px 0 10px;
+    }
+    .brand{
+      display:flex; flex-direction:column; gap:6px;
+    }
+    .logoRow{
+      display:flex; align-items:center; gap:10px;
+    }
+    .mark{
+      width:10px; height:10px; border-radius:99px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      box-shadow: 0 0 22px rgba(124,92,255,.45);
+    }
+    .name{
+      font-weight:900;
+      letter-spacing:.4px;
+      font-size: 16px;
+    }
+    .tag{
+      font-size: 12px;
+      color: var(--muted);
+      border:1px solid var(--line);
+      padding:6px 10px;
+      border-radius:999px;
+      background: rgba(255,255,255,.03);
+      display:inline-flex;
+      width: fit-content;
+    }
+
+    nav{
+      display:flex; gap:14px; flex-wrap:wrap;
+      color: var(--muted);
+      font-weight:700;
+    }
+    nav a{
+      padding:8px 10px;
+      border-radius: 12px;
+    }
+    nav a:hover{
+      background: rgba(255,255,255,.06);
+      color: var(--text);
+    }
+
+    .hero{
+      padding: 56px 0 20px;
+      display:grid;
+      grid-template-columns: 1.2fr .8fr;
+      gap: 18px;
+      align-items:start;
+    }
+    h1{
+      margin: 0 0 12px;
+      font-size: 44px;
+      line-height: 1.08;
+      letter-spacing: -0.7px;
+    }
+    .lead{
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.5;
+      margin: 0 0 18px;
+    }
+    .ctaRow{
+      display:flex;
+      gap: 12px;
+      flex-wrap:wrap;
+      align-items:center;
+      margin-top: 12px;
+    }
+    .btn{
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.04);
+      padding: 12px 14px;
+      border-radius: 14px;
+      font-weight: 900;
+      display:inline-flex; gap:10px; align-items:center;
+      cursor:pointer;
+    }
+    .btn.primary{
+      border:0;
+      background: linear-gradient(135deg, var(--accent), #5a9bff);
+      box-shadow: 0 10px 25px rgba(124,92,255,.25);
+    }
+    .btn:hover{ transform: translateY(-1px); transition: .12s ease; }
+
+    .note{
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 10px;
+      line-height:1.45;
+    }
+
+    .panel{
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.03);
+      border-radius: 18px;
+      padding: 16px;
+    }
+    .panel h3{
+      margin: 0 0 10px;
+      font-size: 14px;
+      color: var(--muted);
+      font-weight: 900;
+      letter-spacing:.4px;
+    }
+    .pill{
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.03);
+      border-radius: 14px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .pill b{ display:block; margin-bottom:6px; }
+    .pill span{ color: var(--muted); font-size: 13px; line-height:1.4; }
+
+    .section{ padding: 22px 0; }
+    .section h2{
+      margin: 0 0 10px;
+      font-size: 26px;
+      letter-spacing: -0.3px;
+    }
+    .section p{
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    .grid3{
+      display:grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+    .card{
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.03);
+      border-radius: 18px;
+      padding: 16px;
+      min-height: 130px;
+    }
+    .card strong{ display:block; font-size: 16px; margin-bottom: 8px; }
+    .card small{ color: var(--muted); font-size: 14px; line-height:1.5; display:block; }
+
+    .steps{
+      display:grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+    }
+    .step{
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.03);
+      border-radius: 18px;
+      padding: 14px;
+    }
+    .step .n{
+      width:28px; height:28px; border-radius: 10px;
+      display:grid; place-items:center;
+      font-weight: 900;
+      background: rgba(124,92,255,.20);
+      border:1px solid rgba(124,92,255,.35);
+      margin-bottom: 10px;
+    }
+    .step b{ display:block; margin-bottom:6px; }
+    .step small{ color: var(--muted); line-height:1.4; display:block; }
+
+    form{ display:grid; gap: 10px; margin-top: 12px; }
+    .row2{ display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    input, select, textarea{
+      width:100%;
+      padding: 12px 12px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.03);
+      color: var(--text);
+      outline: none;
+      font-size: 15px;
+    }
+    textarea{ min-height: 120px; resize: vertical; }
+    input::placeholder, textarea::placeholder{ color: rgba(184,184,198,.75); }
+
+    .formHelp{
+      color: var(--muted);
+      font-size: 13px;
+      line-height:1.4;
+    }
+
+    .footer{
+      border-top: 1px solid var(--line);
+      margin-top: 26px;
+      padding: 18px 0 40px;
+      color: var(--muted);
+      font-size: 13px;
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+
+    @media (max-width: 980px){
+      .hero{ grid-template-columns: 1fr; }
+      .grid3{ grid-template-columns: 1fr; }
+      .steps{ grid-template-columns: 1fr; }
+      h1{ font-size: 36px; }
+      .row2{ grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <div class="logoRow">
+          <div class="mark"></div>
+          <div class="name">Opreon</div>
+        </div>
+        <div class="tag">A PotchPost company</div>
+      </div>
+
+      <nav>
+        <a href="#usecases">Use cases</a>
+        <a href="#process">How it works</a>
+        <a href="#lead">Contact</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div>
+          <h1>Custom AI agents that automate operational work</h1>
+          <p class="lead">
+            You tell us the workflow. We build an AI agent that connects to your existing systems, executes the task safely, and stays monitored and maintained over time.
+          </p>
+
+          <div class="ctaRow">
+            <a class="btn primary" href="#lead">Request an Automation Assessment</a>
+            <button class="btn" id="copyEmailBtn" type="button">Copy email</button>
+          </div>
+
+          <div class="note">
+            Typical integrations: Xero, Sage, QuickBooks, Excel, Google Workspace, and CRMs. Agents can run in advisory, approval, or autonomous mode based on your preference.
+          </div>
+        </div>
+
+        <aside class="panel">
+          <h3>What you get</h3>
+          <div class="pill">
+            <b>Agent built around your workflow</b>
+            <span>We map triggers, data, decisions, and actions into an engineered agent.</span>
+          </div>
+          <div class="pill">
+            <b>Integration + guardrails</b>
+            <span>Deterministic rules, limits, audit logs, and monitoring are part of the build.</span>
+          </div>
+          <div class="pill" style="margin-bottom:0;">
+            <b>Ongoing management</b>
+            <span>APIs change. Needs evolve. We keep the agent reliable and optimized.</span>
+          </div>
+        </aside>
+      </section>
+
+      <section class="section" id="usecases">
+        <h2>Example agents</h2>
+        <p>These are examples. The actual agent is tailored to your process and tools.</p>
+
+        <div class="grid3">
+          <div class="card">
+            <strong>Accounts receivable agent</strong>
+            <small>Tracks overdue invoices, drafts follow ups, escalates based on rules.</small>
+          </div>
+          <div class="card">
+            <strong>Operations reporting agent</strong>
+            <small>Turns operational data into weekly summaries and action lists.</small>
+          </div>
+          <div class="card">
+            <strong>Expense oversight agent</strong>
+            <small>Flags unusual spend and prepares a review pack for approval.</small>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="process">
+        <h2>How we deliver</h2>
+        <p>Clear engineering process. Built for reliability.</p>
+
+        <div class="steps">
+          <div class="step">
+            <div class="n">1</div>
+            <b>Discovery</b>
+            <small>We map the workflow, triggers, data, and desired outcomes.</small>
+          </div>
+          <div class="step">
+            <div class="n">2</div>
+            <b>Architecture</b>
+            <small>Connectors, data model, logic, AI layer, guardrails, monitoring.</small>
+          </div>
+          <div class="step">
+            <div class="n">3</div>
+            <b>Build</b>
+            <small>We implement the agent and integrate it with your systems.</small>
+          </div>
+          <div class="step">
+            <div class="n">4</div>
+            <b>Test</b>
+            <small>We start in advisory or approval mode until it is stable.</small>
+          </div>
+          <div class="step">
+            <div class="n">5</div>
+            <b>Manage</b>
+            <small>Monitoring, logs, updates, and ongoing optimization.</small>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="lead">
+        <h2>Request an Automation Assessment</h2>
+        <p>Fill this in and we will respond with the fastest path to a working agent.</p>
+
+        <!--
+          This form currently does NOT submit to a server.
+          Quick options:
+          - Use Formspree and set form action to your endpoint
+          - Or keep mailto for quick validation
+        -->
+        <form id="leadForm">
+          <div class="row2">
+            <input name="name" placeholder="Name" required />
+            <input name="company" placeholder="Company" required />
+          </div>
+          <div class="row2">
+            <input name="role" placeholder="Role (optional)" />
+            <input name="email" type="email" placeholder="Email" required />
+          </div>
+
+          <select name="system">
+            <option value="">Primary system (optional)</option>
+            <option value="Xero">Xero</option>
+            <option value="Sage">Sage</option>
+            <option value="QuickBooks">QuickBooks</option>
+            <option value="Excel">Excel</option>
+            <option value="Google Workspace">Google Workspace</option>
+            <option value="Other">Other</option>
+          </select>
+
+          <textarea name="workflow" placeholder="Describe the workflow to automate. What triggers it, what data is used, and what outcome you want." required></textarea>
+
+          <button class="btn primary" type="submit">Send</button>
+          <div class="formHelp" id="formHelp">
+            This demo page opens your email app with the message filled in. For real submissions, connect the form to Formspree or a backend endpoint.
+          </div>
+        </form>
+      </section>
+
+      <div class="footer">
+        <div>© <span id="year"></span> Opreon. A PotchPost company.</div>
+        <div>Email: <span id="emailText">hello@opreon.ai</span></div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // Set year
+    document.getElementById("year").textContent = new Date().getFullYear();
+
+    // Update email here
+    const email = "hello@potchpost.co.za"; // change if you want
+    document.getElementById("emailText").textContent = email;
+
+    // Copy email
+    document.getElementById("copyEmailBtn").addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(email);
+        alert("Copied: " + email);
+      } catch (e) {
+        alert("Could not copy. Email is: " + email);
+      }
+    });
+
+    // Lead capture without backend:
+    // opens mailto with prefilled message
+    document.getElementById("leadForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const data = Object.fromEntries(new FormData(e.target).entries());
+
+      const subject = encodeURIComponent("Opreon Automation Assessment Request");
+      const body = encodeURIComponent(
+`Name: ${data.name}
+Company: ${data.company}
+Role: ${data.role || "-"}
+Email: ${data.email}
+System: ${data.system || "-"}
+
+Workflow:
+${data.workflow}
+`);
+      window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+
+      e.target.reset();
+      document.getElementById("formHelp").textContent =
+        "Opened your email app with the message filled in. For real submissions, connect the form to a form service or backend endpoint.";
+    });
+  </script>
+</body>
+</html>
